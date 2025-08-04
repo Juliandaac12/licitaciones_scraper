@@ -2,14 +2,13 @@ import os
 import json
 import gspread
 import time
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import undetected_chromedriver as uc
 
 BASE_URL = "https://www.mercadopublico.cl/BuscarLicitacion"
 SPREADSHEET_ID = "1TqiNXXAgfKlSu2b_Yr9r6AdQU_WacdROsuhcHL0i6Mk"
@@ -34,13 +33,15 @@ def cargar_palabras_clave(sheet):
         return []
 
 def iniciar_driver():
-    options = Options()
-    options.add_argument("--headless")  # Modo sin ventana
-    options.add_argument("--disable-gpu")
+    options = uc.ChromeOptions()
+    options.add_argument("--headless")  # Ejecuta sin interfaz gráfica
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.binary_location = "/usr/bin/chromium"  # 🔥 ESTA ES LA LÍNEA
+    
+    driver = uc.Chrome(options=options)
+    return driver
 
     return webdriver.Chrome(options=options)
 
