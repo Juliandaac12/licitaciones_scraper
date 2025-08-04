@@ -1,15 +1,10 @@
 import os
 import json
 import gspread
-import time
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from oauth2client.service_account import ServiceAccountCredentials
+import asyncio
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from oauth2client.service_account import ServiceAccountCredentials
+from playwright.async_api import async_playwright
 
 BASE_URL = "https://www.mercadopublico.cl/BuscarLicitacion"
 SPREADSHEET_ID = "1TqiNXXAgfKlSu2b_Yr9r6AdQU_WacdROsuhcHL0i6Mk"
@@ -25,7 +20,7 @@ def conectar_google_sheets():
 def cargar_palabras_clave(sheet):
     try:
         hoja = sheet.worksheet("Palabras Clave")
-        palabras_raw = hoja.col_values(2)[8:]  # Columna B (índice 2), desde fila 9 (índice 8)
+        palabras_raw = hoja.col_values(2)[8:]  # Columna B desde fila 9
         palabras_clave = [p.strip() for p in palabras_raw if p.strip()]
         print(f"🔑 {len(palabras_clave)} palabras clave cargadas desde Google Sheets.")
         return palabras_clave
@@ -33,40 +28,22 @@ def cargar_palabras_clave(sheet):
         print(f"❌ Error al cargar palabras clave: {e}")
         return []
 
-def iniciar_driver():
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-
-    driver = webdriver.Chrome(options=options)
-    return driver
-
-
-    return webdriver.Chrome(options=options)
-
-def buscar_y_extraer(driver, palabra, fecha_objetivo):
+async def buscar_y_extraer(page, palabra):
     print(f"🔎 Buscando: {palabra}")
     resultados = []
 
     try:
-        driver.get(BASE_URL)
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "textoBusqueda")))
-        input_busqueda = driver.find_element(By.ID, "textoBusqueda")
-        input_busqueda.clear()
-        input_busqueda.send_keys(palabra)
-        input_busqueda.send_keys(Keys.ENTER)
-
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "lic-block-body")))
-        time.sleep(2)
-
-        tarjetas = driver.find_elements(By.CLASS_NAME, "lic-block-body")
+        await page.goto(BASE_URL)
+        await page.fill("#textoBusqueda", palabra)
+        await page.keyboard.press("Enter")
+        await page.wait_for_selector(".lic-block-body")
+        tarjetas = await page.query_selector_all(".lic-block-body")
 
         for tarjeta in tarjetas:
             try:
-                onclick = tarjeta.find_element(By.CSS_SELECTOR, "a").get_attribute("onclick")
-                if "DetailsAcquisition.aspx?" not in onclick:
+                enlace = await tarjeta.query_selector("a")
+                onclick = await enlace.get_attribute("onclick")
+                if not onclick or "DetailsAcquisition.aspx?" not in onclick:
                     continue
 
                 start = onclick.find("DetailsAcquisition.aspx?")
@@ -77,66 +54,31 @@ def buscar_y_extraer(driver, palabra, fecha_objetivo):
                 if not any(tipo in id_real for tipo in ["LE", "LP", "LQ", "LR"]):
                     continue
 
-                if "LE" in id_real:
-                    tipo = "100-1000 UTM"
-                elif "LP" in id_real:
-                    tipo = "1000-2000 UTM"
-                elif "LQ" in id_real:
-                    tipo = "2000-5000 UTM"
-                elif "LR" in id_real:
-                    tipo = "5000+ UTM"
-                else:
-                    tipo = ""
+                tipo = {
+                    "LE": "100-1000 UTM",
+                    "LP": "1000-2000 UTM",
+                    "LQ": "2000-5000 UTM",
+                    "LR": "5000+ UTM"
+                }.get(id_real[:2], "")
 
-                driver.execute_script("window.open(arguments[0]);", link_ficha)
-                driver.switch_to.window(driver.window_handles[1])
-                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                time.sleep(2)
+                ficha = await page.context.new_page()
+                await ficha.goto(link_ficha)
+                await ficha.wait_for_selector("body")
 
-                try:
-                    titulo = driver.find_element(By.ID, "lblNombreLicitacion").text.strip()
-                except:
-                    titulo = ""
+                def extraer(id):
+                    return ficha.locator(f"#{id}").text_content().catch(lambda _: "")
 
-                try:
-                    descripcion = driver.find_element(By.ID, "lblFicha1Descripcion").text.strip()
-                except:
-                    descripcion = ""
+                titulo = await extraer("lblNombreLicitacion")
+                descripcion = await extraer("lblFicha1Descripcion")
+                fecha_publicacion = await extraer("lblFicha3Publicacion")
+                fecha_cierre = await extraer("lblFicha3Cierre")
+                fecha_apertura = await extraer("lblFicha3ActoAperturaTecnica")
+                fecha_visita = await extraer("lblFicha3Visita")
+                obligatoria = "Sí" if fecha_visita else "No aparece en ficha"
+                tipo_monto = await extraer("lblFicha7TituloMontoEstimado") or "NO PUBLICO"
+                monto = await extraer("lblFicha7MontoEstimado") or "NF"
 
-                try:
-                    fecha_publicacion = driver.find_element(By.ID, "lblFicha3Publicacion").text.strip()
-                except:
-                    fecha_publicacion = ""
-
-                try:
-                    fecha_cierre = driver.find_element(By.ID, "lblFicha3Cierre").text.strip()
-                except:
-                    fecha_cierre = ""
-
-                try:
-                    fecha_apertura = driver.find_element(By.ID, "lblFicha3ActoAperturaTecnica").text.strip()
-                except:
-                    fecha_apertura = ""
-
-                try:
-                    fecha_visita = driver.find_element(By.ID, "lblFicha3Visita").text.strip()
-                    obligatoria = "Sí" if fecha_visita else "No aparece en ficha"
-                except:
-                    fecha_visita = "No disponible"
-                    obligatoria = "No aparece en ficha"
-
-                try:
-                    tipo_monto = driver.find_element(By.ID, "lblFicha7TituloMontoEstimado").text.strip()
-                except:
-                    tipo_monto = "NO PUBLICO"
-
-                try:
-                    monto = driver.find_element(By.ID, "lblFicha7MontoEstimado").text.strip()
-                except:
-                    monto = "NF"
-
-                driver.close()
-                driver.switch_to.window(driver.window_handles[0])
+                await ficha.close()
 
                 resultados.append({
                     "palabra": palabra,
@@ -163,13 +105,16 @@ def buscar_y_extraer(driver, palabra, fecha_objetivo):
 
     return resultados
 
-def ejecutar_scraping(fecha_objetivo, palabras):
-    driver = iniciar_driver()
-    resultados_totales = []
+async def ejecutar_scraping(fecha_objetivo, palabras):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
 
-    for palabra in palabras:
-        resultados = buscar_y_extraer(driver, palabra, fecha_objetivo)
-        resultados_totales.extend(resultados)
+        resultados_totales = []
+        for palabra in palabras:
+            resultados = await buscar_y_extraer(page, palabra)
+            resultados_totales.extend(resultados)
 
-    driver.quit()
-    return resultados_totales
+        await browser.close()
+        return resultados_totales

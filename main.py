@@ -3,10 +3,9 @@ from utils.sheets import guardar_en_hoja, conectar_google_sheets, cargar_palabra
 from utils.fechas import obtener_fecha_ayer_formateada
 import os 
 
-os.system("app-get uptade")
+# Instalar Chromium en entorno Linux (Railway u otro VPS)
+os.system("apt-get update")
 os.system("apt-get install -y chromium chromium-driver")
-
-#hola 
 
 def main():
     fecha_objetivo = obtener_fecha_ayer_formateada()
@@ -25,4 +24,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
