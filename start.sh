@@ -1,9 +1,7 @@
 #!/bin/bash
 
-set -e  # Si ocurre un error, se detiene el script inmediatamente
+# Solo instala el navegador (sin dependencias de sistema)
+playwright install chromium
 
-# Instalar los navegadores necesarios para Playwright
-playwright install --with-deps
-
-# Ejecutar el script principal
+# Ejecutar tu script
 python main.py
