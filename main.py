@@ -2,6 +2,8 @@ from utils.scraping import ejecutar_scraping
 from utils.sheets import guardar_en_hoja, conectar_google_sheets, cargar_palabras_clave
 from utils.fechas import obtener_fecha_ayer_formateada
 
+#hola 
+
 def main():
     fecha_objetivo = obtener_fecha_ayer_formateada()
     print(f"📆 Ejecutando scraping para la fecha: {fecha_objetivo}")
@@ -19,3 +21,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
