@@ -2,9 +2,8 @@ from utils.scraping import ejecutar_scraping
 from utils.sheets import guardar_en_hoja, conectar_google_sheets, cargar_palabras_clave
 from utils.fechas import obtener_fecha_ayer_formateada
 import os 
-import asyncio 
 
-# Instalar Chromium en entorno Linux (Railway u otro VPS)
+# Instalar Chromium y driver en entorno Linux (Railway u otro VPS)
 os.system("apt-get update")
 os.system("apt-get install -y chromium chromium-driver")
 
@@ -15,8 +14,7 @@ def main():
     sheet = conectar_google_sheets()
     palabras = cargar_palabras_clave(sheet)
 
-    # Ejecutar la función async correctamente
-    resultados = asyncio.run(ejecutar_scraping(fecha_objetivo, palabras))
+    resultados = ejecutar_scraping(fecha_objetivo, palabras)
 
     print(f"✅ Total licitaciones encontradas: {len(resultados)}")
     for lic in resultados:

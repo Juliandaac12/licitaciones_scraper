@@ -1,10 +1,16 @@
 import os
 import json
 import gspread
-import asyncio
+import time
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
-from playwright.async_api import async_playwright
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 BASE_URL = "https://www.mercadopublico.cl/BuscarLicitacion"
 SPREADSHEET_ID = "1TqiNXXAgfKlSu2b_Yr9r6AdQU_WacdROsuhcHL0i6Mk"
@@ -28,21 +34,34 @@ def cargar_palabras_clave(sheet):
         print(f"❌ Error al cargar palabras clave: {e}")
         return []
 
-async def buscar_y_extraer(page, palabra):
+def iniciar_driver():
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    driver = webdriver.Chrome(options=options)
+    return driver
+
+def buscar_y_extraer(driver, palabra):
     print(f"🔎 Buscando: {palabra}")
     resultados = []
-
     try:
-        await page.goto(BASE_URL)
-        await page.fill("#textoBusqueda", palabra)
-        await page.keyboard.press("Enter")
-        await page.wait_for_selector(".lic-block-body")
-        tarjetas = await page.query_selector_all(".lic-block-body")
+        driver.get(BASE_URL)
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "textoBusqueda")))
+        input_busqueda = driver.find_element(By.ID, "textoBusqueda")
+        input_busqueda.clear()
+        input_busqueda.send_keys(palabra)
+        input_busqueda.send_keys(Keys.ENTER)
+
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "lic-block-body")))
+        time.sleep(2)
+        tarjetas = driver.find_elements(By.CLASS_NAME, "lic-block-body")
 
         for tarjeta in tarjetas:
             try:
-                enlace = await tarjeta.query_selector("a")
-                onclick = await enlace.get_attribute("onclick")
+                enlace = tarjeta.find_element(By.CSS_SELECTOR, "a")
+                onclick = enlace.get_attribute("onclick")
                 if not onclick or "DetailsAcquisition.aspx?" not in onclick:
                     continue
 
@@ -61,24 +80,30 @@ async def buscar_y_extraer(page, palabra):
                     "LR": "5000+ UTM"
                 }.get(id_real[:2], "")
 
-                ficha = await page.context.new_page()
-                await ficha.goto(link_ficha)
-                await ficha.wait_for_selector("body")
+                driver.execute_script("window.open(arguments[0]);", link_ficha)
+                driver.switch_to.window(driver.window_handles[1])
+
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                time.sleep(1)
 
                 def extraer(id):
-                    return ficha.locator(f"#{id}").text_content().catch(lambda _: "")
+                    try:
+                        return driver.find_element(By.ID, id).text.strip()
+                    except NoSuchElementException:
+                        return ""
 
-                titulo = await extraer("lblNombreLicitacion")
-                descripcion = await extraer("lblFicha1Descripcion")
-                fecha_publicacion = await extraer("lblFicha3Publicacion")
-                fecha_cierre = await extraer("lblFicha3Cierre")
-                fecha_apertura = await extraer("lblFicha3ActoAperturaTecnica")
-                fecha_visita = await extraer("lblFicha3Visita")
+                titulo = extraer("lblNombreLicitacion")
+                descripcion = extraer("lblFicha1Descripcion")
+                fecha_publicacion = extraer("lblFicha3Publicacion")
+                fecha_cierre = extraer("lblFicha3Cierre")
+                fecha_apertura = extraer("lblFicha3ActoAperturaTecnica")
+                fecha_visita = extraer("lblFicha3Visita")
                 obligatoria = "Sí" if fecha_visita else "No aparece en ficha"
-                tipo_monto = await extraer("lblFicha7TituloMontoEstimado") or "NO PUBLICO"
-                monto = await extraer("lblFicha7MontoEstimado") or "NF"
+                tipo_monto = extraer("lblFicha7TituloMontoEstimado") or "NO PUBLICO"
+                monto = extraer("lblFicha7MontoEstimado") or "NF"
 
-                await ficha.close()
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
 
                 resultados.append({
                     "palabra": palabra,
@@ -105,16 +130,13 @@ async def buscar_y_extraer(page, palabra):
 
     return resultados
 
-async def ejecutar_scraping(fecha_objetivo, palabras):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page = await context.new_page()
+def ejecutar_scraping(fecha_objetivo, palabras):
+    driver = iniciar_driver()
+    resultados_totales = []
 
-        resultados_totales = []
-        for palabra in palabras:
-            resultados = await buscar_y_extraer(page, palabra)
-            resultados_totales.extend(resultados)
+    for palabra in palabras:
+        resultados = buscar_y_extraer(driver, palabra)
+        resultados_totales.extend(resultados)
 
-        await browser.close()
-        return resultados_totales
+    driver.quit()
+    return resultados_totales

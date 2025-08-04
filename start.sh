@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Solo instala el navegador (sin dependencias de sistema)
-playwright install chromium
+# Actualiza e instala Chrome y ChromeDriver en entorno Linux
+apt-get update
+apt-get install -y chromium chromium-driver
 
-# Ejecutar tu script
+# Ejecutar tu scraper con Selenium
 python main.py
