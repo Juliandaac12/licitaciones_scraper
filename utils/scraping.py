@@ -1,37 +1,37 @@
+import os
+import json
+import gspread
+import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
-from oauth2client.service_account import ServiceAccountCredentials
-import gspread
 from selenium.webdriver.support import expected_conditions as EC
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import time
 
 BASE_URL = "https://www.mercadopublico.cl/BuscarLicitacion"
 SPREADSHEET_ID = "1TqiNXXAgfKlSu2b_Yr9r6AdQU_WacdROsuhcHL0i6Mk"
 
-
-
 def conectar_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+    credentials_dict = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
     client = gspread.authorize(creds)
+    print("✅ Conexión con Google Sheets exitosa")
     return client.open_by_key(SPREADSHEET_ID)
 
 def cargar_palabras_clave(sheet):
     try:
         hoja = sheet.worksheet("Palabras Clave")
-        # Lee desde la celda B9 hacia abajo
-        palabras_raw = hoja.col_values(2)[8:]  # Índice 8 porque empieza desde fila 9 (0-based)
+        palabras_raw = hoja.col_values(2)[8:]  # Columna B (índice 2), desde fila 9 (índice 8)
         palabras_clave = [p.strip() for p in palabras_raw if p.strip()]
         print(f"🔑 {len(palabras_clave)} palabras clave cargadas desde Google Sheets.")
         return palabras_clave
     except Exception as e:
         print(f"❌ Error al cargar palabras clave: {e}")
         return []
-
 
 def iniciar_driver():
     options = Options()
@@ -42,7 +42,7 @@ def iniciar_driver():
     return webdriver.Chrome(options=options)
 
 def buscar_y_extraer(driver, palabra, fecha_objetivo):
-    print(f"\U0001F50D Buscando: {palabra}")
+    print(f"🔎 Buscando: {palabra}")
     resultados = []
 
     try:
@@ -168,4 +168,3 @@ def ejecutar_scraping(fecha_objetivo, palabras):
 
     driver.quit()
     return resultados_totales
-

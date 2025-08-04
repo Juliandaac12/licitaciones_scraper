@@ -2,13 +2,21 @@ import gspread
 import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import os
+import json
+
 
 SPREADSHEET_ID = "1TqiNXXAgfKlSu2b_Yr9r6AdQU_WacdROsuhcHL0i6Mk"
 
 def conectar_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+    
+    # Leer credenciales desde la variable de entorno
+    credentials_dict = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+    
     client = gspread.authorize(creds)
+    print("✅ Conexión con Google Sheets exitosa")  # Línea opcional para ver en logs
     return client.open_by_key(SPREADSHEET_ID)
 
 def cargar_palabras_clave(sheet):
