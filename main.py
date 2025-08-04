@@ -1,6 +1,10 @@
 from utils.scraping import ejecutar_scraping
 from utils.sheets import guardar_en_hoja, conectar_google_sheets, cargar_palabras_clave
 from utils.fechas import obtener_fecha_ayer_formateada
+import os 
+
+os.system("app-get uptade")
+os.system("apt-get install -y chromium chromium-driver")
 
 #hola 
 
